@@ -18,6 +18,7 @@ android.minapi = 21
 android.ndk = 25b
 android.logcat_filters = *:S python:D
 android.accept_sdk_license = True
+android.skip_update = True
 
 [buildozer]
 log_level = 2
