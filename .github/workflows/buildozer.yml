@@ -27,14 +27,24 @@ jobs:
       run: |
         pip install --user --upgrade buildozer cython virtualenv
 
+    - name: Setup Android SDK Command-line Tools Manually
+      run: |
+        # Create standard Android SDK structure expected by modern build tools
+        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest
+        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
+        
+        # Download official Google command line tools to bypass buildozer package bug
+        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
+        unzip -q cmdline.zip
+        mv cmdline-tools/* /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/
+        
+        # Ingest accepted Android hashes natively
+        echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+
     - name: Compile APK via Buildozer
       run: |
         cd Contadores-master
-        
-        # Pre-accept Android SDK licenses manually
-        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-        echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
         
         if [ -f buildozer.spec ]; then
           sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
