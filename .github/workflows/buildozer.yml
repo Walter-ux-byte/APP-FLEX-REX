@@ -1,6 +1,5 @@
 name: Build Android APK with Buildozer
 
-# CONFIGURACIÓN AUTOMÁTICA DETECTA-GUARDADOS
 on:
   push:
     branches:
@@ -40,36 +39,30 @@ jobs:
       run: |
         cd Contadores-master
         
-        # 1. Force override system variables to ensure Java 17 is used natively
+        # 1. Configurar variables globales de entorno usando Java 17 nativo
         export JAVA_HOME=$JAVA_HOME_17_X64
         export PATH=$JAVA_HOME/bin:$PATH
         export ANDROID_WELCOME_SEEN=1
         
-        # 2. Setup internal standalone SDK architecture
-        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
+        # 2. Crear carpetas base de la arquitectura que Buildozer espera encontrar
+        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
         mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
         
-        # 3. Secure download of Google tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
-        unzip -q cmdline.zip
-        mv cmdline-tools /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest
+        # 3. Enlazar el sdkmanager moderno del servidor a la ruta esperada por Buildozer
+        ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
         
-        # 4. Bridge the legacy tools directory path Buildozer looks for
-        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools
-        ln -s /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-        
-        # 5. Automatically write valid accepted Android licenses hashes
+        # 4. Copiar e Inyectar las firmas y licencias aceptadas de Android
         echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
         
-        # 6. Adjust config spec values automatically
+        # 5. Ajustar especificaciones del archivo buildozer.spec automáticamente
         if [ -f buildozer.spec ]; then
           sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
         fi
         
-        # 7. Execute compile run
+        # 6. Lanzar la compilación
         ~/.local/bin/buildozer android debug
 
     - name: Upload and save the generated APK artifact
