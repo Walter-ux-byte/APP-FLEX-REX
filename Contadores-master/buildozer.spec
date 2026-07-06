@@ -7,7 +7,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,mp4,json
 version = 0.1
 
-# Requisitos limpios
+# Requisitos limpios (Sin ffpyplayer para evitar fallos pesados de C/C++)
 requirements = python3,kivy==2.3.1,kivymd==1.2.0,plyer
 
 orientation = portrait
@@ -16,15 +16,13 @@ android.permissions = INTERNET,CAMERA,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORA
 icon.filename = logo_nuevo.png
 presplash.filename = logo_nuevo.png
 
-# CONFIGURACIÓN DE APIS Y ARQUITECTURA
+# Ajustes de arquitectura nativos de la plataforma
 android.archs = arm64-v8a
 android.api = 33
 android.minapi = 21
 
-# VERSIÓN DEL NDK COMPATIBLE CON EL SERVIDOR DE GITHUB
-android.ndk = 27.3.13750724
+# Dejar que el contenedor Docker gestione las versiones óptimas
 android.accept_sdk_license = True
-
 android.logcat_filters = *:S python:D
 
 [buildozer]
