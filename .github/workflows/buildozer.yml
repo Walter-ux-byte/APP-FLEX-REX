@@ -2,7 +2,9 @@ name: Build Android APK with Buildozer
 
 on:
   push:
-    branches: [ maestro ]
+    branches:
+      - maestro
+      - principal
   workflow_dispatch:
 
 jobs:
@@ -29,21 +31,23 @@ jobs:
 
     - name: Compile APK via Buildozer
       run: |
-        cd Contadores-master
+        # Check which folder exists to avoid directory errors
+        if [ -d "Contadores-master" ]; then
+          cd Contadores-master
+        fi
         
-        # Pre-accept Android SDK licenses manually by writing files ahead of time
+        # Pre-accept Android SDK licenses manually
         mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
         echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
         
-        # Enforce architecture and licenses inside spec file if it exists
+        # Update spec file settings natively
         if [ -f buildozer.spec ]; then
           sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
         fi
         
-        # Run buildozer using target environment flags to accept licensing natively
         export ANDROID_WELCOME_SEEN=1
         ~/.local/bin/buildozer android debug
 
@@ -51,4 +55,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Flex-Rex-App
-        path: Contadores-master/.buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
+        path: |
+          Contadores-master/.buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
+          .buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
