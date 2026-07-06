@@ -1,0 +1,26 @@
+name: Compilar APK con Buildozer
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Descargar el codigo del repositorio
+      uses: actions/checkout@v3
+
+    - name: Obtener Buildozer desde Docker
+      uses: ArtemGovorov/buildozer-action@v1
+      with:
+        command: buildozer -v android debug
+        repository_root: Contadores-master
+
+    - name: Guardar y subir el APK generado
+      uses: actions/upload-artifact@v3
+      with:
+        name: Mi-App-Flex-Rex
+        path: bin/*.apk
