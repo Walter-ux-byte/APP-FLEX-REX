@@ -1,14 +1,11 @@
 name: Build Android APK with Buildozer
-
 on:
   push:
     branches: [ maestro ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
     - name: Checkout repository code
       uses: actions/checkout@v4
@@ -41,26 +38,33 @@ jobs:
     - name: Compile APK via Buildozer
       run: |
         cd Contadores-master
-        
+
         # Link the native Android SDK environment to Buildozer paths
         mkdir -p /home/runner/.buildozer/android/platform
         ln -s $ANDROID_HOME /home/runner/.buildozer/android/platform/android-sdk
-        
-        # FIX: Link the modern cmdline-tools path to the legacy path Buildozer expects
-        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools
-        ln -s /usr/local/lib/android/sdk/cmdline-tools/latest/bin /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-        
+
+        # FIX: enlazar TODA la carpeta cmdline-tools/latest como "tools",
+        # para que bin/ y lib/ queden juntos y sdkmanager pueda resolverse a sí mismo
+        ln -s $ANDROID_HOME/cmdline-tools/latest /home/runner/.buildozer/android/platform/android-sdk/tools
+
         # Accept licensing ahead of time natively
         mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
         echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-        
+
         if [ -f buildozer.spec ]; then
           sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
+
+          # Para ver el error real si algo vuelve a fallar
+          if grep -q "^log_level" buildozer.spec; then
+            sed -i 's/^log_level.*/log_level = 2/' buildozer.spec
+          else
+            echo "log_level = 2" >> buildozer.spec
+          fi
         fi
-        
+
         export ANDROID_WELCOME_SEEN=1
         ~/.local/bin/buildozer android debug
 
