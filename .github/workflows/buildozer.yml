@@ -9,61 +9,22 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository code
       uses: actions/checkout@v4
 
-    - name: Set up Java 17 Development Kit
-      uses: actions/setup-java@v4
+    - name: Build with Buildozer Action
+      uses: ArtemSBulgakov/buildozer-action@v1
+      id: buildozer
       with:
-        distribution: 'temurin'
-        java-version: '17'
+        repository_root: .
+        workdir: Contadores-master
+        buildozer_version: stable
 
-    - name: Set up Python environment
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Install Linux system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libssl-dev libffi-dev libgdbm-dev libsqlite3-dev libbz2-dev liblzma-dev tk-dev libreadline-dev
-
-    - name: Install Buildozer and Cython
-      run: |
-        pip install --user --upgrade buildozer cython virtualenv
-
-    - name: Compile APK via Buildozer
-      run: |
-        cd Contadores-master
-        
-        export JAVA_HOME=$JAVA_HOME_17_X64
-        export PATH=$JAVA_HOME/bin:$PATH
-        export ANDROID_WELCOME_SEEN=1
-        
-        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-        
-        ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-        
-        echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-        
-        if [ ! -f buildozer.spec ]; then
-          echo "ERROR: buildozer.spec no encontrado en $(pwd)"
-          ls -la
-          exit 1
-        fi
-        
-        sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
-        sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
-        
-        ~/.local/bin/buildozer android debug
-
-    - name: Upload and save the generated APK artifact
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Flex-Rex-App
-        path: Contadores-master/.buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
+        name: FlexRex-APK
+        path: ${{ steps.buildozer.outputs.filename }}
