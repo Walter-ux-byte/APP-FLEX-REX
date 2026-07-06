@@ -16,13 +16,13 @@ android.permissions = INTERNET,CAMERA,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORA
 icon.filename = logo_nuevo.png
 presplash.filename = logo_nuevo.png
 
-# CONFIGURACIÓN SINCRONIZADA CON EL SERVIDOR DE GITHUB
+# CONFIGURACIÓN DE APIS Y ARQUITECTURA
 android.archs = arm64-v8a
 android.api = 33
 android.minapi = 21
 
-# Dejar vacío para que Buildozer use el NDK correcto del sistema de forma automática
-android.ndk = 
+# VERSIÓN DEL NDK COMPATIBLE CON EL SERVIDOR DE GITHUB
+android.ndk = 27.3.13750724
 android.accept_sdk_license = True
 
 android.logcat_filters = *:S python:D
