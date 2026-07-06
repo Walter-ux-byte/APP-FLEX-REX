@@ -31,19 +31,23 @@ jobs:
       run: |
         cd Contadores-master
         
-        # 1. Crear directorios del SDK de forma anticipada para inyectar licencias
-        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+        # Pre-aceptar las licencias de Android SDK escribiendo el archivo directamente
+        mkdir -p ~/.android
+        touch ~/.android/repositories.cfg
         
-        # 2. Inyectar directamente los hashes de las licencias aceptadas de Google
-        echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-        
-        # 3. Asegurar los parámetros correctos en el archivo spec
+        # Modificar parámetros en tu buildozer.spec para que use la arquitectura correcta
         if [ -f buildozer.spec ]; then
           sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
         fi
         
-        # 4. Lanzar la compilación respondiendo automáticamente "sí" a cualquier extra
-        yes | ~/.local/bin/buildozer android debug
+        # Ejecutar la compilación pasándole 'yes' de forma segura
+        export ANDROID_WELCOME_SEEN=1
+        ~/.local/bin/buildozer android debug
+
+    - name: Guardar y subir el APK generado
+      uses: actions/upload-artifact@v4
+      with:
+        name: Mi-App-Flex-Rex
+        path: Contadores-master/.buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
