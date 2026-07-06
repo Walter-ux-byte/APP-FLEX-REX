@@ -10,56 +10,15 @@ jobs:
     - name: Checkout repository code
       uses: actions/checkout@v4
 
-    - name: Set up JDK 17 (para Gradle) y JDK 8 (para sdkmanager)
-      uses: actions/setup-java@v4
+    - name: Build APK with Buildozer
+      uses: ArtemSBulgakov/buildozer-action@v1
+      id: buildozer
       with:
-        distribution: 'temurin'
-        java-version: |
-          17
-          8
-
-    - name: Set up Python environment
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Install Linux system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libssl-dev libffi-dev libgdbm-dev libsqlite3-dev libbz2-dev liblzma-dev tk-dev libdb-dev readline-common
-
-    - name: Install Buildozer and Cython
-      run: |
-        pip install --user --upgrade buildozer cython virtualenv
-
-    - name: Setup Android SDK Natively
-      uses: android-actions/setup-android@v3
-      with:
-        cmdline-tools-version: 13114758
-
-    - name: Preinstalar paquetes SDK usando JDK 8 (evita el bug de JAXB)
-      run: |
-        mkdir -p /home/runner/.buildozer/android/platform
-        ln -s $ANDROID_HOME /home/runner/.buildozer/android/platform/android-sdk
-        ln -s $ANDROID_HOME/cmdline-tools/latest /home/runner/.buildozer/android/platform/android-sdk/tools
-
-        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-        echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-
-        # Usar JDK 8 SOLO para esta instalación, porque sdkmanager necesita JAXB (removido en JDK 9+)
-        export JAVA_HOME=$JAVA_HOME_8_X64
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
-
-    - name: Compile APK via Buildozer (con JDK 17)
-      run: |
-        cd Contadores-master
-        export JAVA_HOME=$JAVA_HOME_17_X64
-        export ANDROID_WELCOME_SEEN=1
-        ~/.local/bin/buildozer android debug
+        workdir: Contadores-master
+        buildozer_version: stable
 
     - name: Upload and save the generated APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: Flex-Rex-App
-        path: Contadores-master/.buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
+        path: ${{ steps.buildozer.outputs.filename }}
