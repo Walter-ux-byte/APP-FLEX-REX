@@ -31,18 +31,20 @@ jobs:
       run: |
         cd Contadores-master
         
-        # Pre-accept Android SDK licenses manually
+        # Pre-accept Android SDK licenses manually by writing files ahead of time
         mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
         echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
         
-        # Enforce settings inside buildozer.spec
+        # Enforce architecture and licenses inside spec file if it exists
         if [ -f buildozer.spec ]; then
           sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
           sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
         fi
         
+        # Run buildozer using target environment flags to accept licensing natively
+        export ANDROID_WELCOME_SEEN=1
         ~/.local/bin/buildozer android debug
 
     - name: Upload and save the generated APK artifact
