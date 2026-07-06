@@ -1,3 +1,6 @@
+# main.py - Flex-Rex (revisado)
+# Ajustes: manejo seguro de permisos, acelerómetro protegido, correcciones sintácticas y de flujo.
+
 from kivymd.app import MDApp
 from kivy.app import App
 from kivy.uix.screenmanager import Screen, ScreenManager
@@ -17,6 +20,7 @@ from kivymd.uix.textfield import MDTextField
 from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.utils import platform
+from kivy.uix.behaviors import ButtonBehavior
 import os
 import math
 import json
@@ -24,7 +28,10 @@ import json
 # ==========================================
 # ACELERÓMETRO (funciona en Android vía Plyer)
 # ==========================================
-from plyer import accelerometer
+try:
+    from plyer import accelerometer
+except Exception:
+    accelerometer = None
 
 # Datos del usuario globales
 DATOS_USUARIO = {
@@ -48,22 +55,29 @@ CONTENIDO_PLANES = {
 }
 
 def get_userdata_path():
-    if platform == "android" and App.get_running_app():
-        base_dir = App.get_running_app().user_data_dir
-    else:
-        base_dir = os.path.dirname(__file__)
-    os.makedirs(base_dir, exist_ok=True)
-    return os.path.join(base_dir, "userdata.json")
-
+    """
+    Devuelve ruta segura para userdata.json.
+    En Android usa App.get_running_app().user_data_dir, en escritorio usa carpeta del módulo.
+    """
+    try:
+        if platform == "android" and App.get_running_app():
+            base_dir = App.get_running_app().user_data_dir
+        else:
+            base_dir = os.path.dirname(__file__) or "."
+        os.makedirs(base_dir, exist_ok=True)
+        return os.path.join(base_dir, "userdata.json")
+    except Exception as e:
+        print(f"[FlexRex] get_userdata_path error: {e}")
+        return "userdata.json"
 
 def save_user_data():
     path = get_userdata_path()
     try:
         with open(path, "w", encoding="utf-8") as archivo:
             json.dump(DATOS_USUARIO, archivo, ensure_ascii=False, indent=2)
+        print(f"[FlexRex] userdata saved to {path}")
     except Exception as e:
         print(f"[FlexRex] Error guardando userdata.json: {e}")
-
 
 def load_user_data():
     path = get_userdata_path()
@@ -73,9 +87,9 @@ def load_user_data():
                 datos = json.load(archivo)
             if isinstance(datos, dict):
                 DATOS_USUARIO.update(datos)
+                print("[FlexRex] userdata cargada")
         except Exception as e:
             print(f"[FlexRex] Error leyendo userdata.json: {e}")
-
 
 def animar_boton_en_movimiento(boton, delay=0):
     if getattr(boton, "_animacion_movimiento_activa", False):
@@ -92,7 +106,10 @@ def animar_boton_en_movimiento(boton, delay=0):
             anim_elevacion = Animation(elevation=10, duration=0.65, t='in_out_sine') + \
                              Animation(elevation=2, duration=0.65, t='in_out_sine')
             anim_elevacion.repeat = True
-            anim_elevacion.start(boton)
+            try:
+                anim_elevacion.start(boton)
+            except Exception:
+                pass
 
     Clock.schedule_once(iniciar_animacion, delay)
     return boton
@@ -101,30 +118,36 @@ def animar_botones_en_layout(layout, delay_base=0.04):
     botones = (MDRaisedButton, MDFlatButton, MDIconButton, MDFillRoundFlatButton)
     delay = 0
     for widget in layout.walk():
-        if isinstance(widget, botones):
-            animar_boton_en_movimiento(widget, delay)
-            delay += delay_base
+        try:
+            if isinstance(widget, botones):
+                animar_boton_en_movimiento(widget, delay)
+                delay += delay_base
+        except Exception:
+            continue
+
+# Clase utilitaria para que MDCard actúe como botón (soporta on_release)
+class CardButton(ButtonBehavior, MDCard):
+    pass
 
 # PANTALLA 1: BIENVENIDA
 class PantallaBienvenida(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
+
         layout_pantalla = FloatLayout()
-        
+
         # Imagen de fondo a pantalla completa
         ruta_manual = "logo_cropped.png"
         self.logo = Image(
-            source=ruta_manual, 
+            source=ruta_manual,
             size_hint=(1, 1),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
-            fit_mode="contain"
+            allow_stretch=True,
+            keep_ratio=False
         )
         layout_pantalla.add_widget(self.logo)
-        
+
         # Overlay oscuro semitransparente para legibilidad
-        from kivy.uix.widget import Widget
-        from kivy.graphics import Color, Rectangle
         overlay = Widget(size_hint=(1, 1))
         with overlay.canvas:
             Color(0, 0, 0, 0.4)
@@ -132,7 +155,7 @@ class PantallaBienvenida(Screen):
         overlay.bind(pos=lambda w, p: setattr(self.overlay_rect, 'pos', p),
                      size=lambda w, s: setattr(self.overlay_rect, 'size', s))
         layout_pantalla.add_widget(overlay)
-        
+
         # Título FLEX-REX en la parte superior
         layout_pantalla.add_widget(MDLabel(
             text="FLEX-REX", halign="center", font_style="H3", bold=True,
@@ -146,20 +169,20 @@ class PantallaBienvenida(Screen):
             size_hint=(1, None), height=30,
             pos_hint={"center_x": 0.5, "top": 0.85}
         ))
-        
+
         # Botón "Comenzar Ahora" grande y centrado abajo
         self.btn_comenzar = MDFillRoundFlatButton(
-            text="Comenzar Ahora", 
+            text="Comenzar Ahora",
             pos_hint={"center_x": 0.5, "center_y": 0.18},
             size_hint=(0.8, None), height=55,
-            md_bg_color=(1, 0.2, 0.2, 1), 
+            md_bg_color=(1, 0.2, 0.2, 1),
             font_size="18sp",
             on_release=lambda x: self.ir_a_registro()
         )
         layout_pantalla.add_widget(self.btn_comenzar)
         self.animar_boton_pulso()
-        
-        # Botón "Ver Planes Premium" con recuadro/borde
+
+        # Botón "Ver Planes Premium"
         btn_planes = MDFillRoundFlatButton(
             text="Ver Planes Premium",
             pos_hint={"center_x": 0.5, "center_y": 0.08},
@@ -170,91 +193,94 @@ class PantallaBienvenida(Screen):
             on_release=lambda x: self.ir_a_membresias()
         )
         layout_pantalla.add_widget(btn_planes)
-        
+
         # Botón perfil
         btn_perfil = MDIconButton(
-            icon="account-circle", 
+            icon="account-circle",
             pos_hint={"right": 0.95, "top": 0.98},
             theme_text_color="Custom", text_color=(1, 1, 1, 1),
             on_release=lambda x: self.ir_a_perfil()
         )
         layout_pantalla.add_widget(btn_perfil)
-        
+
         self.add_widget(layout_pantalla)
         animar_botones_en_layout(layout_pantalla)
 
     def animar_logo_dinamico(self):
-        pass  # Logo is now full-screen background, no animation needed
+        pass  # Logo is full-screen background, no animation needed
 
     def animar_boton_pulso(self):
         animar_boton_en_movimiento(self.btn_comenzar)
 
     def ir_a_registro(self):
-        self.manager.transition.direction = "left"
-        self.manager.current = "registro"
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "registro"
 
     def ir_a_membresias(self):
-        self.manager.transition.direction = "left"
-        self.manager.current = "membresias"
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "membresias"
 
     def ir_a_perfil(self):
-        self.manager.transition.direction = "left"
-        self.manager.current = "perfil"
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "perfil"
 
 
 # PANTALLA 2: REGISTRO
 class PantallaRegistro(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
+
         layout_pantalla = FloatLayout()
         scroll = ScrollView(size_hint=(1, 1))
         layout_principal = BoxLayout(orientation='vertical', padding=25, spacing=15, size_hint_y=None)
         layout_principal.bind(minimum_height=layout_principal.setter('height'))
-        
+
         layout_principal.add_widget(MDLabel(
-            text="¡Bienvenido!\nCuéntanos un poco sobre ti", 
+            text="¡Bienvenido!\nCuéntanos un poco sobre ti",
             halign="center", font_style="H5", size_hint_y=None, height=70
         ))
-        
+
         self.txt_nombre = MDTextField(hint_text="¿Cómo te llamas?", size_hint_y=None, height=50, mode="rectangle", icon_left="account")
         self.txt_edad = MDTextField(hint_text="¿Qué edad tienes?", size_hint_y=None, height=50, mode="rectangle", icon_left="calendar")
         self.txt_altura = MDTextField(hint_text="Altura (cm)", size_hint_y=None, height=50, mode="rectangle", icon_left="human-male-height")
         self.txt_peso = MDTextField(hint_text="Peso (kg)", size_hint_y=None, height=50, mode="rectangle", icon_left="weight")
-        
+
         layout_principal.add_widget(self.txt_nombre)
         layout_principal.add_widget(self.txt_edad)
         layout_principal.add_widget(self.txt_altura)
         layout_principal.add_widget(self.txt_peso)
-        
+
         layout_sexo = BoxLayout(orientation='vertical', spacing=5, size_hint_y=None, height=75)
         layout_sexo.add_widget(MDLabel(text="Sexo:", font_style="Caption", theme_text_color="Secondary", size_hint_y=None, height=20))
-        
+
         self.btn_sexo_dropdown = MDFillRoundFlatButton(
-            text=DATOS_USUARIO["sexo"], size_hint=(1, None), height=45, 
+            text=DATOS_USUARIO["sexo"], size_hint=(1, None), height=45,
             md_bg_color=(0.2, 0.2, 0.2, 1), on_release=self.abrir_menu_sexo
         )
         layout_sexo.add_widget(self.btn_sexo_dropdown)
         layout_principal.add_widget(layout_sexo)
-        
+
         opciones = ["Masculino", "Femenino", "Prefiero no decirlo"]
         self.menu_sexo = MDDropdownMenu(
             caller=self.btn_sexo_dropdown,
             items=[{"text": op, "viewclass": "OneLineListItem", "on_release": lambda x=op: self.cambiar_sexo(x)} for op in opciones],
             width_mult=4,
         )
-        
+
         btn_siguiente = MDFillRoundFlatButton(
             text="Continuar", size_hint=(0.85, None), height=50,
             pos_hint={"center_x": 0.5}, md_bg_color=(1, 0.2, 0.2, 1), on_release=lambda x: self.ir_a_sugerencia()
         )
         layout_principal.add_widget(btn_siguiente)
-        
+
         scroll.add_widget(layout_principal)
         layout_pantalla.add_widget(scroll)
-        
+
         self.btn_regresar_flotante = MDIconButton(
-            icon="arrow-left", md_bg_color=(0.25, 0.25, 0.25, 1),     
+            icon="arrow-left", md_bg_color=(0.25, 0.25, 0.25, 1),
             pos_hint={"x": 0.04, "top": 0.96}, on_release=lambda x: self.regresar_pantalla()
         )
         layout_pantalla.add_widget(self.btn_regresar_flotante)
@@ -262,16 +288,23 @@ class PantallaRegistro(Screen):
         animar_botones_en_layout(layout_pantalla)
 
     def abrir_menu_sexo(self, boton):
-        self.menu_sexo.open()
+        try:
+            self.menu_sexo.open()
+        except Exception as e:
+            print(f"[FlexRex] abrir_menu_sexo error: {e}")
 
     def cambiar_sexo(self, sexo_elegido):
-        self.btn_sexo_dropdown.text = sexo_elegido
-        DATOS_USUARIO["sexo"] = sexo_elegido
-        self.menu_sexo.dismiss()
+        try:
+            self.btn_sexo_dropdown.text = sexo_elegido
+            DATOS_USUARIO["sexo"] = sexo_elegido
+            self.menu_sexo.dismiss()
+        except Exception as e:
+            print(f"[FlexRex] cambiar_sexo error: {e}")
 
     def regresar_pantalla(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "bienvenida"
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "bienvenida"
 
     def ir_a_sugerencia(self):
         DATOS_USUARIO["nombre"] = self.txt_nombre.text if self.txt_nombre.text else "Anónimo"
@@ -280,8 +313,10 @@ class PantallaRegistro(Screen):
         DATOS_USUARIO["peso"] = self.txt_peso.text if self.txt_peso.text else "70"
         DATOS_USUARIO["plan_sugerido"] = None
         DATOS_USUARIO["ejercicio"] = None
-        self.manager.transition.direction = "left"
-        self.manager.current = "ejercicios"
+        # Puedes dirigir al flujo de sugerencia si lo deseas, aquí vamos a ejercicios
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "ejercicios"
 
 
 # PANTALLA 3: SUGERENCIA DE PLAN
@@ -289,85 +324,111 @@ class PantallaSugerenciaPlan(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plan_generado = None
-        
+
     def on_enter(self, *args):
-        self.generar_plan_personalizado()
-        self.animar_botones_entrada()
-    
+        # genera el plan cada vez que se entra
+        try:
+            self.generar_plan_personalizado()
+            self.animar_botones_entrada()
+        except Exception as e:
+            print(f"[FlexRex] generar_plan_personalizado error: {e}")
+
     def generar_plan_personalizado(self):
-        altura = DATOS_USUARIO["altura"]
-        peso = DATOS_USUARIO["peso"]
-        imc = float(peso) / ((float(altura) / 100) ** 2)
-        
+        try:
+            altura = float(DATOS_USUARIO.get("altura") or 170)
+            peso = float(DATOS_USUARIO.get("peso") or 70)
+            imc = float(peso) / ((float(altura) / 100) ** 2)
+        except Exception:
+            altura = 170.0
+            peso = 70.0
+            imc = 24.0
+
         if imc < 18.5:
-            self.plan_generado = {"objetivo": "Ganar masa muscular", "ejercicio_recomendado": "Sentadillas", "repeticiones": " Meta: 10 repeticiones", "consejo": "Enfócate en la técnica baja."}
+            self.plan_generado = {"objetivo": "Ganar masa muscular", "ejercicio_recomendado": "Sentadillas", "repeticiones": "Meta: 10 repeticiones", "consejo": "Enfócate en técnica, empieza suave."}
         elif imc < 25:
             self.plan_generado = {"objetivo": "Mantener y tonificar", "ejercicio_recomendado": "Flexiones", "repeticiones": "Meta: 15 repeticiones", "consejo": "Controla el descenso suave."}
         else:
             self.plan_generado = {"objetivo": "Acondicionamiento", "ejercicio_recomendado": "Sentadillas", "repeticiones": "Meta: 12 repeticiones", "consejo": "Mantén la espalda recta."}
         self.build_ui()
-    
+
     def build_ui(self):
-        self.clear_widgets()
-        layout_pantalla = FloatLayout()
-        layout_principal = BoxLayout(orientation='vertical', padding=25, spacing=15)
-        
-        layout_principal.add_widget(MDLabel(text=f"Plan para {DATOS_USUARIO['nombre']}", halign="center", font_style="H5", bold=True, size_hint_y=None, height=50))
-        
-        # Card modernizada con badge simulado
-        card_plan = MDCard(orientation='vertical', padding=20, spacing=12, size_hint=(0.95, None), height=320, pos_hint={"center_x": 0.5}, md_bg_color=(0.1, 0.1, 0.15, 1), radius=[20])
-        badge = MDLabel(text="RECOMENDACIÓN IA", font_style="Caption", bold=True, text_color=(0, 0.8, 1, 1), theme_text_color="Custom")
-        card_plan.add_widget(badge)
-        card_plan.add_widget(MDLabel(text=f"Objetivo: {self.plan_generado['objetivo']}", font_style="Subtitle1"))
-        card_plan.add_widget(MDLabel(text=f"SUGERIDO: {self.plan_generado['ejercicio_recomendado']}", font_style="H6", bold=True, text_color=(1,0.5,0.2,1), theme_text_color="Custom"))
-        card_plan.add_widget(MDLabel(text=f"{self.plan_generado['repeticiones']}", font_style="Body1"))
-        card_plan.add_widget(MDLabel(text=f"Consejo: {self.plan_generado['consejo']}", font_style="Caption", theme_text_color="Secondary"))
-        layout_principal.add_widget(card_plan)
-        
-        self.contenedor_botones = FloatLayout(size_hint=(1, None), height=60)
-        self.btn_aceptar = MDFillRoundFlatButton(text="Aceptar Plan", size_hint=(0.45, 0.9), pos_hint={"x": -0.5, "center_y": 0.5}, md_bg_color=(0.1, 0.7, 0.1, 1), on_release=lambda x: self.aceptar_plan())
-        self.btn_omitir = MDFlatButton(text="Elegir Yo", size_hint=(0.45, 0.9), pos_hint={"right": 1.5, "center_y": 0.5}, theme_text_color="Custom", text_color=(0.8, 0.8, 0.8, 1), on_release=lambda x: self.omitir_plan())
-        self.contenedor_botones.add_widget(self.btn_aceptar)
-        self.contenedor_botones.add_widget(self.btn_omitir)
-        layout_principal.add_widget(self.contenedor_botones)
-        
-        layout_pantalla.add_widget(layout_principal)
-        self.add_widget(layout_pantalla)
-        animar_botones_en_layout(layout_pantalla)
-    
+        # Reconstruye la UI para mostrar el plan
+        try:
+            self.clear_widgets()
+            layout_pantalla = FloatLayout()
+            layout_principal = BoxLayout(orientation='vertical', padding=25, spacing=15)
+
+            layout_principal.add_widget(MDLabel(text=f"Plan para {DATOS_USUARIO['nombre'] or 'Usuario'}", halign="center", font_style="H5", bold=True, size_hint_y=None, height=50))
+
+            # Card modernizada con badge simulado
+            card_plan = MDCard(orientation='vertical', padding=20, spacing=12, size_hint=(0.95, None), height=320, pos_hint={"center_x": 0.5}, md_bg_color=(0.1, 0.1, 0.15, 1), radius=[20])
+            badge = MDLabel(text="RECOMENDACIÓN IA", font_style="Caption", bold=True, text_color=(0, 0.8, 1, 1), theme_text_color="Custom")
+            card_plan.add_widget(badge)
+            card_plan.add_widget(MDLabel(text=f"Objetivo: {self.plan_generado['objetivo']}", font_style="Subtitle1"))
+            card_plan.add_widget(MDLabel(text=f"SUGERIDO: {self.plan_generado['ejercicio_recomendado']}", font_style="H6", bold=True, text_color=(1,0.5,0.2,1), theme_text_color="Custom"))
+            card_plan.add_widget(MDLabel(text=f"{self.plan_generado['repeticiones']}", font_style="Body1"))
+            card_plan.add_widget(MDLabel(text=f"Consejo: {self.plan_generado['consejo']}", font_style="Caption", theme_text_color="Secondary"))
+            layout_principal.add_widget(card_plan)
+
+            # Contenedor de botones: empezamos fuera de pantalla para animar entrada
+            self.contenedor_botones = FloatLayout(size_hint=(1, None), height=60)
+            self.btn_aceptar = MDFillRoundFlatButton(text="Aceptar Plan", size_hint=(0.45, 0.9), pos_hint={"x": -0.5, "center_y": 0.5}, md_bg_color=(0.1, 0.7, 0.1, 1), on_release=lambda x: self.aceptar_plan())
+            self.btn_omitir = MDFlatButton(text="Elegir Yo", size_hint=(0.45, 0.9), pos_hint={"right": 1.5, "center_y": 0.5}, theme_text_color="Custom", text_color=(0.8, 0.8, 0.8, 1), on_release=lambda x: self.omitir_plan())
+            self.contenedor_botones.add_widget(self.btn_aceptar)
+            self.contenedor_botones.add_widget(self.btn_omitir)
+            layout_principal.add_widget(self.contenedor_botones)
+
+            layout_pantalla.add_widget(layout_principal)
+            self.add_widget(layout_pantalla)
+            animar_botones_en_layout(layout_pantalla)
+        except Exception as e:
+            print(f"[FlexRex] build_ui error: {e}")
+
     def animar_botones_entrada(self):
-        Animation(pos_hint={"x": 0.03, "center_y": 0.5}, duration=0.8, t='out_back').start(self.btn_aceptar)
-        Animation(pos_hint={"right": 0.97, "center_y": 0.5}, duration=0.8, t='out_back').start(self.btn_omitir)
+        try:
+            Animation(pos_hint={"x": 0.03, "center_y": 0.5}, duration=0.8, t='out_back').start(self.btn_aceptar)
+            Animation(pos_hint={"right": 0.97, "center_y": 0.5}, duration=0.8, t='out_back').start(self.btn_omitir)
+        except Exception as e:
+            print(f"[FlexRex] animar_botones_entrada error: {e}")
 
     def aceptar_plan(self):
         DATOS_USUARIO["plan_sugerido"] = self.plan_generado
         DATOS_USUARIO["ejercicio"] = self.plan_generado['ejercicio_recomendado']
-        self.ir_a_ejercicios()
-    
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "ejercicios"
+
     def omitir_plan(self):
         DATOS_USUARIO["plan_sugerido"] = None
         DATOS_USUARIO["ejercicio"] = None
-        self.ir_a_ejercicios()
-    
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "ejercicios"
+
     def ir_a_ejercicios(self):
-        self.manager.transition.direction = "left"
-        self.manager.current = "ejercicios"
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "ejercicios"
 
 
 # PANTALLA 4: SELECCIÓN DE EJERCICIOS
 class PantallaEjercicios(Screen):
     def on_enter(self, *args):
-        self.actualizar_resumen()
-        if DATOS_USUARIO["plan_sugerido"]:
-            self.mostrar_plan_aceptado()
-            self.container_botones.height = 0
-            self.container_botones.opacity = 0
-        else:
-            self.lbl_titulo.text = "¿Qué vas a entrenar hoy?"
-            self.container_plan.height = 0
-            self.container_botones.height = 220
-            self.container_botones.opacity = 1
-            self.animar_botones_cascada()
+        # Ajusta vistas según si hay plan sugerido
+        try:
+            self.actualizar_resumen()
+            if DATOS_USUARIO["plan_sugerido"]:
+                self.mostrar_plan_aceptado()
+                self.container_botones.height = 0
+                self.container_botones.opacity = 0
+            else:
+                self.lbl_titulo.text = "¿Qué vas a entrenar hoy?"
+                self.container_plan.height = 0
+                self.container_botones.height = 220
+                self.container_botones.opacity = 1
+                self.animar_botones_cascada()
+        except Exception as e:
+            print(f"[FlexRex] PantallaEjercicios on_enter error: {e}")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -375,53 +436,56 @@ class PantallaEjercicios(Screen):
         scroll = ScrollView(size_hint=(1, 1))
         layout_principal = BoxLayout(orientation='vertical', padding=25, spacing=15, size_hint_y=None)
         layout_principal.bind(minimum_height=layout_principal.setter('height'))
-        
+
         self.lbl_resumen = MDLabel(text="", halign="center", font_style="Subtitle2", theme_text_color="Secondary", size_hint_y=None, height=25)
         layout_principal.add_widget(self.lbl_resumen)
-        
+
         self.lbl_titulo = MDLabel(text="", halign="center", font_style="H6", bold=True, size_hint_y=None, height=35)
         layout_principal.add_widget(self.lbl_titulo)
-        
+
         self.container_plan = BoxLayout(orientation='vertical', size_hint_y=None, height=0)
         layout_principal.add_widget(self.container_plan)
-        
+
         self.container_botones = GridLayout(cols=3, spacing=15, size_hint_y=None, height=180)
-        
+
         def crear_tarjeta_ejercicio(titulo, desc, img_source, color, callback):
-            card = MDCard(orientation="vertical", padding=10, spacing=10, size_hint_y=None, height=180, md_bg_color=(0.15, 0.15, 0.15, 1), radius=[20])
+            # Usamos CardButton para soportar on_release
+            card = CardButton(orientation="vertical", padding=10, spacing=10, size_hint_y=None, height=180, md_bg_color=(0.15, 0.15, 0.15, 1), radius=[20])
             img = Image(source=img_source, allow_stretch=True, size_hint_y=0.6)
             card.add_widget(img)
             text_box = BoxLayout(orientation="vertical", size_hint_y=0.4)
             text_box.add_widget(MDLabel(text=titulo, font_style="Subtitle2", bold=True, theme_text_color="Primary", halign="center"))
             text_box.add_widget(MDLabel(text=desc, font_style="Caption", theme_text_color="Secondary", halign="center"))
             card.add_widget(text_box)
-            card.bind(on_release=lambda x: callback(titulo, card))
+            # CardButton hereda ButtonBehavior, dispatcha on_release
+            card.bind(on_release=lambda instance: callback(titulo, card))
             return card
 
         self.btn_dominadas = crear_tarjeta_ejercicio("Dominadas", "Espalda", "img_dominadas.png", (0, 0.8, 1, 1), self.seleccionar_ejercicio)
         self.btn_flexiones = crear_tarjeta_ejercicio("Flexiones", "Pecho", "img_flexiones.png", (1, 0.5, 0, 1), self.seleccionar_ejercicio)
         self.btn_sentadillas = crear_tarjeta_ejercicio("Sentadillas", "Piernas", "img_sentadillas.png", (0.2, 0.8, 0.2, 1), self.seleccionar_ejercicio)
+
         animar_boton_en_movimiento(self.btn_dominadas)
         animar_boton_en_movimiento(self.btn_flexiones, 0.08)
         animar_boton_en_movimiento(self.btn_sentadillas, 0.16)
-        
+
         self.container_botones.add_widget(self.btn_dominadas)
         self.container_botones.add_widget(self.btn_flexiones)
         self.container_botones.add_widget(self.btn_sentadillas)
         layout_principal.add_widget(self.container_botones)
-        
+
         self.container_video = BoxLayout(orientation='vertical', size_hint_y=None, height=0, opacity=0)
         layout_principal.add_widget(self.container_video)
-        
+
         btn_layout = BoxLayout(orientation='vertical', size_hint_y=None, height=50)
         self.btn_entrenar = MDFillRoundFlatButton(
-            text="Iniciar Cámara de Entrenamiento", size_hint=(0.85, None), height=50, 
+            text="Iniciar Cámara de Entrenamiento", size_hint=(0.85, None), height=50,
             pos_hint={"center_x": 0.5}, md_bg_color=(0.1, 0.6, 0.1, 1),
             on_release=lambda x: self.comenzar_entrenamiento_camara()
         )
         btn_layout.add_widget(self.btn_entrenar)
         layout_principal.add_widget(btn_layout)
-        
+
         scroll.add_widget(layout_principal)
         layout_pantalla.add_widget(scroll)
         self.btn_regresar_flotante = MDIconButton(
@@ -435,43 +499,51 @@ class PantallaEjercicios(Screen):
         layout_pantalla.add_widget(self.btn_regresar_flotante)
         self.add_widget(layout_pantalla)
         animar_botones_en_layout(layout_pantalla)
-    
+
     def animar_botones_cascada(self):
-        self.btn_dominadas.opacity = 0
-        self.btn_flexiones.opacity = 0
-        self.btn_sentadillas.opacity = 0
-        Animation(opacity=1, duration=0.4).start(self.btn_dominadas)
-        Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4).start(self.btn_flexiones), 0.1)
-        Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4).start(self.btn_sentadillas), 0.2)
+        try:
+            self.btn_dominadas.opacity = 0
+            self.btn_flexiones.opacity = 0
+            self.btn_sentadillas.opacity = 0
+            Animation(opacity=1, duration=0.4).start(self.btn_dominadas)
+            Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4).start(self.btn_flexiones), 0.1)
+            Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4).start(self.btn_sentadillas), 0.2)
+        except Exception as e:
+            print(f"[FlexRex] animar_botones_cascada error: {e}")
 
     def actualizar_resumen(self):
-        self.lbl_resumen.text = f"Atleta: {DATOS_USUARIO['nombre']} | Ejercicio: {DATOS_USUARIO['ejercicio']}"
+        self.lbl_resumen.text = f"Atleta: {DATOS_USUARIO.get('nombre','-')} | Ejercicio: {DATOS_USUARIO.get('ejercicio', '-') or '-'}"
 
     def regresar_pantalla(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "registro"
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "registro"
 
     def mostrar_plan_aceptado(self):
         self.lbl_titulo.text = "PLAN SELECCIONADO"
         self.container_plan.clear_widgets()
         card = MDCard(orientation='vertical', padding=15, size_hint=(0.9, None), height=100, pos_hint={"center_x":0.5}, md_bg_color=(0.1, 0.2, 0.15, 1))
-        card.add_widget(MDLabel(text=f"Rutina de: {DATOS_USUARIO['ejercicio']}", font_style="H6", halign="center"))
+        card.add_widget(MDLabel(text=f"Rutina de: {DATOS_USUARIO.get('ejercicio','-')}", font_style="H6", halign="center"))
         self.container_plan.add_widget(card)
         self.container_plan.height = 110
 
     def seleccionar_ejercicio(self, ejercicio, boton_pulsado):
         DATOS_USUARIO["ejercicio"] = ejercicio
         self.actualizar_resumen()
-        for btn in [self.btn_dominadas, self.btn_flexiones, self.btn_sentadillas]:
-            btn.md_bg_color = (0.15, 0.15, 0.15, 1)
-        boton_pulsado.md_bg_color = (0.3, 0.1, 0.1, 1) 
+        try:
+            for btn in [self.btn_dominadas, self.btn_flexiones, self.btn_sentadillas]:
+                btn.md_bg_color = (0.15, 0.15, 0.15, 1)
+            boton_pulsado.md_bg_color = (0.3, 0.1, 0.1, 1)
+        except Exception:
+            pass
         self.mostrar_video_tutorial(ejercicio)
 
     def mostrar_video_tutorial(self, ejercicio):
+        # Construye la sección de tutorial textual (video placeholder)
         self.container_video.clear_widgets()
         self.container_video.height = 300
         self.container_video.opacity = 1
-        
+
         instrucciones = {
             "Dominadas": [
                 "1. Agarra la barra con las palmas hacia afuera, manos al ancho de hombros.",
@@ -492,34 +564,37 @@ class PantallaEjercicios(Screen):
                 "4. Sube apretando los glúteos hasta quedar de pie."
             ]
         }
-        
+
         card_vid = MDCard(orientation='vertical', padding=15, spacing=8, radius=[15], md_bg_color=(0.1, 0.1, 0.1, 1), size_hint_y=None, height=290)
         lbl_info = MDLabel(text=f"Cómo hacer {ejercicio}", font_style="Subtitle1", size_hint_y=None, height=25, halign="center", bold=True, theme_text_color="Custom", text_color=(1, 0.4, 0.4, 1))
         card_vid.add_widget(lbl_info)
-        
+
         contenido = BoxLayout(orientation='horizontal', spacing=10)
         tutorial_placeholder = BoxLayout(orientation='vertical', padding=12, spacing=8, size_hint_x=0.4)
         tutorial_placeholder.add_widget(MDLabel(text="Video de tutorial no disponible en Android", halign="center", theme_text_color="Secondary", size_hint_y=None, height=40))
-        tutorial_placeholder.add_widget(MDLabel(text="Usa el botón de simulación para practicar repeticiones reales desde tu teléfono.", halign="center", theme_text_color="Secondary", size_hint_y=None, height=50))
+        tutorial_placeholder.add_widget(MDLabel(text="Usa el botón de simulación para practicar repeticiones reales desde tu teléfono.", halign="center", theme_text_color="Secondary", size_hint_y=None, height=60))
         tutorial_placeholder.add_widget(MDLabel(text="Sigue las instrucciones y aumenta la carga poco a poco.", halign="center", theme_text_color="Secondary"))
         contenido.add_widget(tutorial_placeholder)
-        
+
         pasos_layout = BoxLayout(orientation='vertical', spacing=4, size_hint_x=0.6)
         pasos = instrucciones.get(ejercicio, ["Selecciona un ejercicio para ver instrucciones."])
         for paso in pasos:
             pasos_layout.add_widget(MDLabel(text=paso, font_style="Caption", theme_text_color="Primary", size_hint_y=None, height=35))
         contenido.add_widget(pasos_layout)
-        
+
         card_vid.add_widget(contenido)
         self.container_video.add_widget(card_vid)
 
     def comenzar_entrenamiento_camara(self):
-        if not DATOS_USUARIO["ejercicio"]:
-            dialog = MDDialog(title="⚠️ Error", text="Por favor, selecciona un ejercicio antes de encender la cámara.", buttons=[MDFlatButton(text="Entendido", on_release=lambda x: dialog.dismiss())])
+        if not DATOS_USUARIO.get("ejercicio"):
+            dialog = MDDialog(title="⚠️ Error", text="Por favor, selecciona un ejercicio antes de encender la cámara.")
+            btn = MDFlatButton(text="Entendido", on_release=lambda inst, d=dialog: d.dismiss())
+            dialog.buttons = [btn]
             dialog.open()
             return
-        self.manager.transition.direction = "left"
-        self.manager.current = "entrenamiento_activo"
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "entrenamiento_activo"
 
 
 # PANTALLA 5: DETECCIÓN EN TIEMPO REAL (Cámara real + Acelerómetro)
@@ -532,37 +607,53 @@ class PantallaEntrenamiento(Screen):
     }
 
     def on_enter(self, *args):
-        ejercicio = DATOS_USUARIO["ejercicio"] or "Sentadillas"
-        self.lbl_ejercicio.text = f"Entrenando: {str(ejercicio).upper()}"
-        self.contador_reps = 0
-        self.lbl_contador.text = "0"
-        self.estado_fase = "arriba"
-        self.umbral = self.UMBRALES.get(ejercicio, self.UMBRALES["Sentadillas"])
-
-        self.scanner_text.text = "Escaneando cuerpo con IA..."
-        self.scanner_line_y = 0
-        self.scanner_event = Clock.schedule_interval(self.actualizar_escaneo, 1 / 30.0)
-
-        # Captura segura del acelerómetro para prevenir cuelgues repentinos
         try:
-            accelerometer.enable()
-            self.sensor_disponible = True
-        except Exception as e:
-            self.sensor_disponible = False
-            self.lbl_ejercicio.text = "⚠️ Sensor no disponible, usa los botones manuales"
-            print(f"[FlexRex] Error al iniciar el acelerómetro de hardware: {e}")
+            ejercicio = DATOS_USUARIO.get("ejercicio") or "Sentadillas"
+            self.lbl_ejercicio.text = f"Entrenando: {str(ejercicio).upper()}"
+            self.contador_reps = 0
+            self.lbl_contador.text = "0"
+            # Iniciamos en "abajo" para detectar subida luego
+            self.estado_fase = "abajo"
+            self.umbral = self.UMBRALES.get(ejercicio, self.UMBRALES["Sentadillas"])
 
-        Clock.schedule_interval(self.leer_sensor, 1.0 / 20.0)
+            self.scanner_text.text = "Escaneando cuerpo con IA..."
+            self.scanner_line_y = 0
+            self.scanner_event = Clock.schedule_interval(self.actualizar_escaneo, 1 / 30.0)
+
+            # Captura segura del acelerómetro para prevenir cuelgues repentinos
+            self.sensor_disponible = False
+            if accelerometer:
+                try:
+                    accelerometer.enable()
+                    self.sensor_disponible = True
+                    print("[FlexRex] acelerómetro habilitado")
+                except Exception as e:
+                    self.sensor_disponible = False
+                    self.lbl_ejercicio.text = "⚠️ Sensor no disponible, usa los botones manuales"
+                    print(f"[FlexRex] Error al iniciar el acelerómetro: {e}")
+            else:
+                print("[FlexRex] Plyer accelerometer no disponible en este entorno")
+
+            # Leer sensor en 20Hz (se ejecuta en hilo de Kivy porque usamos Clock)
+            self._leer_sensor_event = Clock.schedule_interval(self.leer_sensor, 1.0 / 20.0)
+        except Exception as e:
+            print(f"[FlexRex] on_enter entrenamiento error: {e}")
 
     def on_leave(self, *args):
-        Clock.unschedule(self.leer_sensor)
-        if hasattr(self, 'scanner_event') and self.scanner_event:
-            self.scanner_event.cancel()
-            self.scanner_event = None
         try:
-            accelerometer.disable()
-        except Exception:
-            pass
+            if hasattr(self, '_leer_sensor_event') and self._leer_sensor_event:
+                self._leer_sensor_event.cancel()
+                self._leer_sensor_event = None
+            if hasattr(self, 'scanner_event') and self.scanner_event:
+                self.scanner_event.cancel()
+                self.scanner_event = None
+            if accelerometer:
+                try:
+                    accelerometer.disable()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[FlexRex] on_leave entrenamiento error: {e}")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -627,38 +718,53 @@ class PantallaEntrenamiento(Screen):
         animar_botones_en_layout(layout)
 
     def _update_scanner_canvas(self, *args):
-        self.scanner_bg.pos = self.scanner_widget.pos
-        self.scanner_bg.size = self.scanner_widget.size
-        self.scanner_line.size = (self.scanner_widget.width, 6)
-        self.scanner_line.pos = (self.scanner_widget.x, self.scanner_widget.y + self.scanner_line_y)
-        self.scanner_outline.rectangle = (self.scanner_widget.x, self.scanner_widget.y, self.scanner_widget.width, self.scanner_widget.height)
+        try:
+            self.scanner_bg.pos = self.scanner_widget.pos
+            self.scanner_bg.size = self.scanner_widget.size
+            self.scanner_line.size = (self.scanner_widget.width, 6)
+            self.scanner_line.pos = (self.scanner_widget.x, self.scanner_widget.y + self.scanner_line_y)
+            self.scanner_outline.rectangle = (self.scanner_widget.x, self.scanner_widget.y, self.scanner_widget.width, self.scanner_widget.height)
+        except Exception:
+            pass
 
     def actualizar_escaneo(self, dt):
-        if not self.scanner_widget:
+        if not getattr(self, "scanner_widget", None):
             return
-        self.scanner_line_y += self.scanner_widget.height * dt * 0.4
-        if self.scanner_line_y > self.scanner_widget.height:
-            self.scanner_line_y = 0
-        self.scanner_line.pos = (self.scanner_widget.x, self.scanner_widget.y + self.scanner_line_y)
+        try:
+            self.scanner_line_y += self.scanner_widget.height * dt * 0.4
+            if self.scanner_line_y > self.scanner_widget.height:
+                self.scanner_line_y = 0
+            self.scanner_line.pos = (self.scanner_widget.x, self.scanner_widget.y + self.scanner_line_y)
+        except Exception:
+            pass
 
     def simular_repeticion(self):
         self.contador_reps = max(0, getattr(self, 'contador_reps', 0) + 1)
-        self.lbl_contador.text = str(self.contador_reps)
+        # Aseguramos actualización en hilo principal
+        Clock.schedule_once(lambda dt: setattr(self.lbl_contador, "text", str(self.contador_reps)), 0)
 
     def ajustar_manual(self, delta):
-        self.contador_reps = max(0, self.contador_reps + delta)
-        self.lbl_contador.text = str(self.contador_reps)
+        self.contador_reps = max(0, getattr(self, 'contador_reps', 0) + delta)
+        Clock.schedule_once(lambda dt: setattr(self.lbl_contador, "text", str(self.contador_reps)), 0)
 
     def leer_sensor(self, dt):
-        if not self.sensor_disponible:
+        # Se ejecuta por Clock (hilo principal de Kivy), por eso puede actualizar UI directamente
+        if not getattr(self, "sensor_disponible", False):
+            return
+        if accelerometer is None:
             return
         try:
             valores = accelerometer.acceleration
-            if not valores or valores[0] is None:
+            if not valores:
                 return
-            x, y, z = valores[0], valores[1], valores[2]
+            # Plyer puede devolver (None, None, None) o una lista
+            if isinstance(valores, (list, tuple)) and len(valores) >= 3 and valores[0] is not None:
+                x, y, z = valores[0], valores[1], valores[2]
+            else:
+                return
             magnitud = math.sqrt(x * x + y * y + z * z)
 
+            # Lógica simple de detección: detectar paso pico/valle
             if magnitud > self.umbral["pico"] and self.estado_fase == "abajo":
                 self.contador_reps += 1
                 self.lbl_contador.text = str(self.contador_reps)
@@ -666,21 +772,30 @@ class PantallaEntrenamiento(Screen):
             elif magnitud < self.umbral["valle"]:
                 self.estado_fase = "abajo"
         except Exception as e:
-            pass
+            # No queremos crash por lecturas de sensor
+            print(f"[FlexRex] leer_sensor error: {e}")
 
     def terminar(self):
-        dialog = MDDialog(
-            title="¡Buen Trabajo!",
-            text=f"Completaste un total de {self.contador_reps} repeticiones.",
-            buttons=[MDFlatButton(text="Volver", on_release=lambda x: self.salir_limpio(dialog))]
-        )
-        dialog.open()
-        save_user_data()
+        try:
+            dialog = MDDialog(
+                title="¡Buen Trabajo!",
+                text=f"Completaste un total de {getattr(self, 'contador_reps', 0)} repeticiones."
+            )
+            btn = MDFlatButton(text="Volver", on_release=lambda inst, d=dialog: self.salir_limpio(d))
+            dialog.buttons = [btn]
+            dialog.open()
+            save_user_data()
+        except Exception as e:
+            print(f"[FlexRex] terminar error: {e}")
 
     def salir_limpio(self, dialogo):
-        dialogo.dismiss()
-        self.manager.transition.direction = "right"
-        self.manager.current = "bienvenida"
+        try:
+            dialogo.dismiss()
+        except Exception:
+            pass
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "bienvenida"
 
 
 # ==========================================
@@ -690,15 +805,19 @@ class PantallaEntrenamiento(Screen):
 class PantallaPerfil(Screen):
     def on_enter(self, *args):
         self.lbl_nombre.text = DATOS_USUARIO["nombre"] if DATOS_USUARIO["nombre"] else "Usuario"
-        self.lbl_detalles.text = f"{DATOS_USUARIO['edad']} años | {DATOS_USUARIO['peso']} kg | {DATOS_USUARIO['altura']} cm"
+        self.lbl_detalles.text = f"{DATOS_USUARIO.get('edad','-')} años | {DATOS_USUARIO.get('peso','-')} kg | {DATOS_USUARIO.get('altura','-')} cm"
         self.lbl_membresia.text = f"Membresía: {DATOS_USUARIO['membresia']}"
-        self.lbl_membresia.text_color = (1, 0.84, 0, 1) if DATOS_USUARIO["membresia_activa"] else (0.7, 0.7, 0.7, 1)
+        # color según si está activa
+        if DATOS_USUARIO.get("membresia_activa"):
+            self.lbl_membresia.text_color = (1, 0.84, 0, 1)
+        else:
+            self.lbl_membresia.text_color = (0.7, 0.7, 0.7, 1)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         layout = FloatLayout()
         box = BoxLayout(orientation='vertical', padding=25, spacing=20)
-        
+
         header = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
         btn_back = MDIconButton(icon="arrow-left", on_release=lambda x: self.volver())
         header.add_widget(btn_back)
@@ -710,18 +829,18 @@ class PantallaPerfil(Screen):
         self.lbl_nombre = MDLabel(text="Usuario", halign="center", font_style="H5", bold=True)
         self.lbl_detalles = MDLabel(text="-", halign="center", font_style="Subtitle1", theme_text_color="Secondary")
         self.lbl_membresia = MDLabel(text="Membresía: Gratis", halign="center", font_style="Subtitle2", theme_text_color="Custom", text_color=(0.7, 0.7, 0.7, 1))
-        
+
         avatar_box.add_widget(self.lbl_nombre)
         avatar_box.add_widget(self.lbl_detalles)
         avatar_box.add_widget(self.lbl_membresia)
         box.add_widget(avatar_box)
 
         stats_card = MDCard(orientation='horizontal', padding=15, size_hint_y=None, height=80, md_bg_color=(0.15, 0.15, 0.15, 1), radius=[15])
-        
+
         stat1 = BoxLayout(orientation='vertical')
         stat1.add_widget(MDLabel(text="12", halign="center", font_style="H6", text_color=(0, 0.8, 1, 1), theme_text_color="Custom"))
         stat1.add_widget(MDLabel(text="Sesiones", halign="center", font_style="Caption"))
-        
+
         stat2 = BoxLayout(orientation='vertical')
         stat2.add_widget(MDLabel(text="5", halign="center", font_style="H6", text_color=(1, 0.5, 0, 1), theme_text_color="Custom"))
         stat2.add_widget(MDLabel(text="Racha (días)", halign="center", font_style="Caption"))
@@ -732,31 +851,34 @@ class PantallaPerfil(Screen):
 
         box.add_widget(MDFillRoundFlatButton(text="Ver Mi Progreso", size_hint=(1, None), height=50, md_bg_color=(0.2, 0.2, 0.2, 1), on_release=lambda x: self.ir_a_progreso()))
         box.add_widget(MDFillRoundFlatButton(text="Gestionar Membresía", size_hint=(1, None), height=50, md_bg_color=(1, 0.84, 0, 1), text_color=(0, 0, 0, 1), on_release=lambda x: self.ir_a_membresias()))
-        
+
         box.add_widget(MDLabel(text="", size_hint_y=1))
-        
+
         layout.add_widget(box)
         self.add_widget(layout)
         animar_botones_en_layout(layout)
 
     def volver(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "bienvenida"
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "bienvenida"
 
     def ir_a_progreso(self):
-        self.manager.transition.direction = "left"
-        self.manager.current = "progreso"
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "progreso"
 
     def ir_a_membresias(self):
-        self.manager.transition.direction = "left"
-        self.manager.current = "membresias"
+        if self.manager:
+            self.manager.transition.direction = "left"
+            self.manager.current = "membresias"
 
 class PantallaProgreso(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         layout = FloatLayout()
         box = BoxLayout(orientation='vertical', padding=25, spacing=20)
-        
+
         header = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
         btn_back = MDIconButton(icon="arrow-left", on_release=lambda x: self.volver())
         header.add_widget(btn_back)
@@ -764,12 +886,12 @@ class PantallaProgreso(Screen):
         box.add_widget(header)
 
         grid = BoxLayout(orientation='horizontal', size_hint_y=None, height=100, spacing=15)
-        
+
         card_reps = MDCard(orientation='vertical', padding=10, md_bg_color=(0.15, 0.15, 0.15, 1), radius=[15])
         card_reps.add_widget(MDIconButton(icon="arm-flex", pos_hint={"center_x": 0.5}, theme_text_color="Custom", text_color=(1, 0.2, 0.2, 1)))
         card_reps.add_widget(MDLabel(text="345", halign="center", font_style="H5", bold=True))
         card_reps.add_widget(MDLabel(text="Reps Totales", halign="center", font_style="Caption"))
-        
+
         card_dias = MDCard(orientation='vertical', padding=10, md_bg_color=(0.15, 0.15, 0.15, 1), radius=[15])
         card_dias.add_widget(MDIconButton(icon="calendar-check", pos_hint={"center_x": 0.5}, theme_text_color="Custom", text_color=(0, 0.8, 0.3, 1)))
         card_dias.add_widget(MDLabel(text="Lunes", halign="center", font_style="H5", bold=True))
@@ -787,7 +909,7 @@ class PantallaProgreso(Screen):
         box.add_widget(historial)
 
         msg = MDCard(md_bg_color=(1, 0.5, 0, 0.2), padding=15, radius=[10], size_hint_y=None, height=80)
-        msg.add_widget(MDLabel(text="¡Estás en el 10% superior de usuarios activos esta semana! Sigue así.", theme_text_color="Custom", text_color=(1, 0.6, 0, 1), halign="center", font_style="Subtitle2"))
+        msg.add_widget(MDLabel(text="¡Estás en el 10% superior de usuarios activos esta semana! Sigue así.", theme_text_color="Custom", text_color=(1, 0.6, 0, 1), halign="center", font_style="Subtitle1"))
         box.add_widget(msg)
 
         box.add_widget(MDLabel(text="", size_hint_y=1))
@@ -796,18 +918,23 @@ class PantallaProgreso(Screen):
         animar_botones_en_layout(layout)
 
     def volver(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "perfil"
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "perfil"
 
 class PantallaMembresias(Screen):
     def on_enter(self, *args):
-        self.actualizar_ui()
+        try:
+            self.actualizar_ui()
+        except Exception as e:
+            print(f"[FlexRex] PantallaMembresias on_enter error: {e}")
 
     def actualizar_ui(self):
+        # Reinicia colores y textos según DATOS_USUARIO
         self.card_gratis.md_bg_color = (0.15, 0.15, 0.15, 1)
         self.card_mensual.md_bg_color = (0.15, 0.15, 0.25, 1)
         self.card_anual.md_bg_color = (0.25, 0.2, 0.1, 1)
-        
+
         self.btn_gratis.text = "Seleccionar"
         self.btn_mensual.text = "Seleccionar"
         self.btn_anual.text = "Seleccionar"
@@ -828,13 +955,14 @@ class PantallaMembresias(Screen):
         scroll = ScrollView(size_hint=(1, 1))
         box = BoxLayout(orientation='vertical', padding=20, spacing=15, size_hint_y=None)
         box.bind(minimum_height=box.setter('height'))
-        
+
         header = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
         btn_back = MDIconButton(icon="arrow-left", on_release=lambda x: self.volver())
         header.add_widget(btn_back)
         header.add_widget(MDLabel(text="Planes Premium", font_style="H5", bold=True))
         box.add_widget(header)
 
+        # Gratis
         self.card_gratis = MDCard(orientation='horizontal', padding=14, spacing=14, size_hint_y=None, height=250, radius=[20])
         self.card_gratis.add_widget(Image(source='img_plan_gratis.png', allow_stretch=True, keep_ratio=True, size_hint=(0.48, 1)))
         info_gratis = BoxLayout(orientation='vertical', spacing=8, size_hint_x=0.52)
@@ -846,6 +974,7 @@ class PantallaMembresias(Screen):
         self.card_gratis.add_widget(info_gratis)
         box.add_widget(self.card_gratis)
 
+        # Mensual
         self.card_mensual = MDCard(orientation='horizontal', padding=14, spacing=14, size_hint_y=None, height=250, radius=[20])
         self.card_mensual.add_widget(Image(source='img_plan_mensual.png', allow_stretch=True, keep_ratio=True, size_hint=(0.48, 1)))
         info_mensual = BoxLayout(orientation='vertical', spacing=8, size_hint_x=0.52)
@@ -857,6 +986,7 @@ class PantallaMembresias(Screen):
         self.card_mensual.add_widget(info_mensual)
         box.add_widget(self.card_mensual)
 
+        # Anual
         self.card_anual = MDCard(orientation='horizontal', padding=14, spacing=14, size_hint_y=None, height=270, radius=[20])
         self.card_anual.add_widget(Image(source='img_plan_anual.png', allow_stretch=True, keep_ratio=True, size_hint=(0.48, 1)))
         info_anual = BoxLayout(orientation='vertical', spacing=8, size_hint_x=0.52)
@@ -876,21 +1006,28 @@ class PantallaMembresias(Screen):
         animar_botones_en_layout(layout)
 
     def volver(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "bienvenida"
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "bienvenida"
 
     def seleccionar_plan(self, plan, precio):
-        if plan == "Gratis":
-            DATOS_USUARIO["membresia"] = "Gratis"
-            DATOS_USUARIO["membresia_activa"] = False
-            self.actualizar_ui()
-            dialog = MDDialog(title="Plan Actualizado", text="Has vuelto al plan Gratis.", buttons=[MDFlatButton(text="OK", on_release=lambda x: dialog.dismiss())])
-            dialog.open()
-        else:
-            DATOS_USUARIO["plan_temp"] = plan
-            DATOS_USUARIO["precio_temp"] = precio
-            self.manager.transition.direction = "left"
-            self.manager.current = "pago"
+        try:
+            if plan == "Gratis":
+                DATOS_USUARIO["membresia"] = "Gratis"
+                DATOS_USUARIO["membresia_activa"] = False
+                self.actualizar_ui()
+                dialog = MDDialog(title="Plan Actualizado", text="Has vuelto al plan Gratis.")
+                btn = MDFlatButton(text="OK", on_release=lambda inst, d=dialog: d.dismiss())
+                dialog.buttons = [btn]
+                dialog.open()
+            else:
+                DATOS_USUARIO["plan_temp"] = plan
+                DATOS_USUARIO["precio_temp"] = precio
+                if self.manager:
+                    self.manager.transition.direction = "left"
+                    self.manager.current = "pago"
+        except Exception as e:
+            print(f"[FlexRex] seleccionar_plan error: {e}")
 
 class PantallaPago(Screen):
     def on_enter(self, *args):
@@ -907,7 +1044,7 @@ class PantallaPago(Screen):
         super().__init__(**kwargs)
         layout = FloatLayout()
         box = BoxLayout(orientation='vertical', padding=25, spacing=15)
-        
+
         header = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
         btn_back = MDIconButton(icon="arrow-left", on_release=lambda x: self.volver())
         header.add_widget(btn_back)
@@ -946,7 +1083,7 @@ class PantallaPago(Screen):
         preview = MDCard(md_bg_color=(0.1, 0.1, 0.2, 1), radius=[15], size_hint_y=None, height=150, padding=20, orientation="vertical")
         preview.add_widget(MDIconButton(icon="integrated-circuit", theme_text_color="Custom", text_color=(1, 0.84, 0, 1)))
         preview.add_widget(MDLabel(text="**** **** **** ****", font_style="H5", theme_text_color="Secondary"))
-        
+
         row_prev = BoxLayout(orientation="horizontal")
         row_prev.add_widget(MDLabel(text="TITULAR", font_style="Caption"))
         row_prev.add_widget(MDLabel(text="MM/AA", font_style="Caption", halign="right"))
@@ -955,7 +1092,7 @@ class PantallaPago(Screen):
 
         self.txt_nombre = MDTextField(hint_text="Nombre del Titular", mode="rectangle", icon_left="account", size_hint_y=None, height=50)
         self.txt_tarjeta = MDTextField(hint_text="Número de Tarjeta", mode="rectangle", icon_left="credit-card", size_hint_y=None, height=50, max_text_length=16)
-        
+
         row_fechas = BoxLayout(orientation='horizontal', spacing=10, size_hint_y=None, height=50)
         self.txt_fecha = MDTextField(hint_text="MM/AA", mode="rectangle")
         self.txt_cvv = MDTextField(hint_text="CVV", mode="rectangle", max_text_length=3, password=True)
@@ -975,19 +1112,26 @@ class PantallaPago(Screen):
         animar_botones_en_layout(layout)
 
     def volver(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "membresias"
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "membresias"
 
     def procesar_pago(self):
-        if not self.txt_nombre.text or len(self.txt_tarjeta.text) < 15 or not self.txt_fecha.text or not self.txt_cvv.text:
-            dialog = MDDialog(title="Error", text="Por favor completa todos los campos correctamente.", buttons=[MDFlatButton(text="OK", on_release=lambda x: dialog.dismiss())])
-            dialog.open()
-            return
-        
-        DATOS_USUARIO["membresia"] = DATOS_USUARIO.get("plan_temp", "Premium")
-        DATOS_USUARIO["membresia_activa"] = True
-        self.manager.transition.direction = "left"
-        self.manager.current = "confirmacion"
+        try:
+            if not self.txt_nombre.text or len(self.txt_tarjeta.text) < 15 or not self.txt_fecha.text or not self.txt_cvv.text:
+                dialog = MDDialog(title="Error", text="Por favor completa todos los campos correctamente.")
+                btn = MDFlatButton(text="OK", on_release=lambda inst, d=dialog: d.dismiss())
+                dialog.buttons = [btn]
+                dialog.open()
+                return
+
+            DATOS_USUARIO["membresia"] = DATOS_USUARIO.get("plan_temp", "Premium")
+            DATOS_USUARIO["membresia_activa"] = True
+            if self.manager:
+                self.manager.transition.direction = "left"
+                self.manager.current = "confirmacion"
+        except Exception as e:
+            print(f"[FlexRex] procesar_pago error: {e}")
 
 class PantallaConfirmacion(Screen):
     def on_enter(self, *args):
@@ -999,21 +1143,20 @@ class PantallaConfirmacion(Screen):
         super().__init__(**kwargs)
         layout = FloatLayout()
         box = BoxLayout(orientation='vertical', padding=30, spacing=20)
-        
+
         box.add_widget(MDLabel(text="", size_hint_y=0.2))
 
         self.icon_check = MDIconButton(
-            icon="check-circle", 
-            icon_size="100sp", 
-            theme_text_color="Custom", 
+            icon="check-circle",
+            icon_size="100sp",
+            theme_text_color="Custom",
             text_color=(0, 0.8, 0.3, 1),
             pos_hint={"center_x": 0.5},
             size_hint=(None, None), size=(120, 120)
         )
         box.add_widget(self.icon_check)
-        box.add_widget(MDLabel(text="Pago realizado con exito", halign="center", font_style="H4", bold=True))
+        box.add_widget(MDLabel(text="Pago realizado con éxito", halign="center", font_style="H4", bold=True))
 
-        box.add_widget(MDLabel(text="¡Pago Exitoso!", halign="center", font_style="H4", bold=True))
         self.lbl_plan = MDLabel(text="Plan Activado: -", halign="center", font_style="Subtitle1", theme_text_color="Secondary")
         box.add_widget(self.lbl_plan)
 
@@ -1057,21 +1200,26 @@ class PantallaConfirmacion(Screen):
         animar_botones_en_layout(layout)
 
     def animar_check(self):
-        self.icon_check.icon_size = "10sp"
-        anim = Animation(icon_size="100sp", duration=0.6, t='out_bounce')
-        anim.start(self.icon_check)
+        try:
+            self.icon_check.icon_size = "10sp"
+            anim = Animation(icon_size="100sp", duration=0.6, t='out_bounce')
+            anim.start(self.icon_check)
+        except Exception:
+            pass
 
     def ir_inicio(self):
-        self.manager.transition.direction = "right"
-        self.manager.current = "bienvenida"
+        if self.manager:
+            self.manager.transition.direction = "right"
+            self.manager.current = "bienvenida"
 
 # ORQUESTADOR CENTRAL
 class FlexRexApp(MDApp):
     def build(self):
+        # Carga datos antes de levantar UI
         load_user_data()
         self.theme_cls.theme_style = 'Dark'
         self.theme_cls.primary_palette = 'Red'
-        
+
         sm = ScreenManager()
         sm.add_widget(PantallaBienvenida(name='bienvenida'))
         sm.add_widget(PantallaRegistro(name='registro'))
@@ -1086,13 +1234,22 @@ class FlexRexApp(MDApp):
         return sm
 
     def on_start(self):
-        # Solicita permisos de forma segura una vez que la ventana de Kivy ya está levantada
+        # Solicitar permisos de forma segura, sólo en Android y en on_start
         if platform == "android":
             try:
                 from android.permissions import request_permissions, Permission
+                # Podemos pedir cámara (si la app la usa) y otros permisos necesarios
                 request_permissions([Permission.CAMERA])
+                print("[FlexRex] request_permissions CAMERA")
             except Exception as e:
                 print(f"[FlexRex] No se pudo solicitar el permiso de cámara: {e}")
+
+    def on_stop(self):
+        # Guardamos datos al cerrar la app
+        try:
+            save_user_data()
+        except Exception as e:
+            print(f"[FlexRex] on_stop save error: {e}")
 
 if __name__ == "__main__":
     FlexRexApp().run()
