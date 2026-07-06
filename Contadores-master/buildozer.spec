@@ -14,12 +14,13 @@ icon.filename = logo_nuevo.png
 presplash.filename = logo_nuevo.png
 
 # Configuración de Android
-android.arch = armeabi-v7a
+android.archs = arm64-v8a
 android.api = 33
 android.minapi = 21
 android.sdk = 24
 android.ndk = 25b
 android.logcat_filters = *:S python:D
+android.accept_sdk_license = True
 
 # Empaquetado Android
 # Buildozer Android debe ejecutarse en Linux/WSL o en un entorno Linux compatible.
