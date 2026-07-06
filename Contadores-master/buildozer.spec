@@ -21,7 +21,7 @@ android.archs = arm64-v8a
 android.api = 33
 android.minapi = 21
 
-# Forzar la descarga limpia del NDK compatible de Kivy
+# Forzar la descarga limpia del NDK compatible por red interna
 android.ndk = 25b
 android.accept_sdk_license = True
 android.logcat_filters = *:S python:D
