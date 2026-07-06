@@ -2,7 +2,7 @@ name: Compilar APK con Buildozer
 
 on:
   push:
-    branches: [ master ]
+    branches: [ maestro ]
   workflow_dispatch:
 
 jobs:
@@ -31,26 +31,19 @@ jobs:
       run: |
         cd Contadores-master
         
-        # Crear estructura de configuración limpia y aceptar términos
-        mkdir -p ~/.android
-        touch ~/.android/repositories.cfg
+        # 1. Crear directorios del SDK de forma anticipada para inyectar licencias
+        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
         
-        if [ ! -f buildozer.spec ]; then
-          ~/.local/bin/buildozer init
+        # 2. Inyectar directamente los hashes de las licencias aceptadas de Google
+        echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        
+        # 3. Asegurar los parámetros correctos en el archivo spec
+        if [ -f buildozer.spec ]; then
+          sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
+          sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
+          sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
         fi
         
-        # Forzar la configuración interna del archivo .spec para que sea compatible
-        sed -i 's/title = My Application/title = Flex Rex/g' buildozer.spec
-        # Simplificamos requerimientos iniciales para asegurar el núcleo estable de la interfaz
-        sed -i 's/requirements = python3,kivy/requirements = python3,kivy==2.3.1,kivymd==1.2.0,opencv-python/g' buildozer.spec
-        sed -i 's/#android.permissions = CAMERA/android.permissions = CAMERA/g' buildozer.spec
-        
-        # Cambiar arquitectura a la estándar moderna de 64 bits para evitar conflictos antiguos
-        sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
-        
-        # Forzar la aceptación automática de licencias de Android SDK
-        sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
-        sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
-        
-        # Ejecutar compilación limpia sin usar el comando destructivo 'yes'
-        ~/.local/bin/buildozer android debug
+        # 4. Lanzar la compilación respondiendo automáticamente "sí" a cualquier extra
+        yes | ~/.local/bin/buildozer android debug
