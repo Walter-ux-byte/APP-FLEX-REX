@@ -1,24 +1,26 @@
 name: Build Android APK with Buildozer
 
+# CONFIGURACIÓN AUTOMÁTICA DETECTA-GUARDADOS
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+      - maestro
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
     - name: Checkout repository code
       uses: actions/checkout@v4
 
-    - name: Set up JDK 17 (Gradle) y JDK 8 (sdkmanager)
+    - name: Set up Java 17 Development Kit
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: |
-          17
-          8
+        java-version: '17'
 
     - name: Set up Python environment
       uses: actions/setup-python@v5
@@ -34,32 +36,44 @@ jobs:
       run: |
         pip install --user --upgrade buildozer cython virtualenv
 
-    - name: Setup Android SDK Natively
-      uses: android-actions/setup-android@v3
-      with:
-        cmdline-tools-version: 13114758
-
-    - name: Preinstalar paquetes SDK usando JDK 8 (evita el bug de JAXB)
+    - name: Compile APK via Buildozer
       run: |
-        mkdir -p /home/runner/.buildozer/android/platform
-        ln -s $ANDROID_HOME /home/runner/.buildozer/android/platform/android-sdk
-        ln -s $ANDROID_HOME/cmdline-tools/latest /home/runner/.buildozer/android/platform/android-sdk/tools
-
+        cd Contadores-master
+        
+        # 1. Force override system variables to ensure Java 17 is used natively
+        export JAVA_HOME=$JAVA_HOME_17_X64
+        export PATH=$JAVA_HOME/bin:$PATH
+        export ANDROID_WELCOME_SEEN=1
+        
+        # 2. Setup internal standalone SDK architecture
+        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
         mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
+        
+        # 3. Secure download of Google tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
+        unzip -q cmdline.zip
+        mv cmdline-tools /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest
+        
+        # 4. Bridge the legacy tools directory path Buildozer looks for
+        mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools
+        ln -s /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin /home/runner/.buildozer/android/platform/android-sdk/tools/bin
+        
+        # 5. Automatically write valid accepted Android licenses hashes
         echo -e "\n893a5cd8b1e647af1d152de3ab0df356dd4ffb43\n24333f1a50b3b83d6e24c993f043e844a30e4130\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-
-        export JAVA_HOME=$JAVA_HOME_8_X64
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
-
-    - name: Compile APK via Buildozer (con JDK 17)
-      run: |
-        export JAVA_HOME=$JAVA_HOME_17_X64
-        export ANDROID_WELCOME_SEEN=1
+        
+        # 6. Adjust config spec values automatically
+        if [ -f buildozer.spec ]; then
+          sed -i 's/android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
+          sed -i 's/#android.accept_sdk_license = False/android.accept_sdk_license = True/g' buildozer.spec
+          sed -i 's/android.archs = armeabi-v7a/android.archs = arm64-v8a/g' buildozer.spec
+        fi
+        
+        # 7. Execute compile run
         ~/.local/bin/buildozer android debug
 
     - name: Upload and save the generated APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: Flex-Rex-App
-        path: .buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
+        path: Contadores-master/.buildozer/android/platform/build-arm64-v8a/dists/flexrex/build/outputs/apk/debug/*.apk
