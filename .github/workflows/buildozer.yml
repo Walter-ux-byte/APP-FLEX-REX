@@ -37,7 +37,7 @@ jobs:
 
     - name: Compile APK via Buildozer
       run: |
-        cd Contadores-master
+        cd .
         
         # 1. Configurar variables globales de entorno usando Java 17 nativo
         export JAVA_HOME=$JAVA_HOME_17_X64
