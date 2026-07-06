@@ -37,11 +37,11 @@ jobs:
 
     - name: Fix Buildozer SDK Path Bug (Symlink)
       run: |
-        # Crear la ruta ficticia que Buildozer busca ciegamente y enlazarla al sdkmanager real del servidor
+        # Enlazar el sdkmanager moderno para pasar la validación inicial
         mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
         ln -s /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
         
-        # Avisarle al sistema dónde están las licencias oficiales ya aprobadas
+        # Copiar licencias aprobadas del sistema
         mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
         cp -r /usr/local/lib/android/sdk/licenses/* /home/runner/.buildozer/android/platform/android-sdk/licenses/ || true
 
@@ -49,7 +49,12 @@ jobs:
       run: |
         cd Contadores-master
         
-        # Forzar el uso de herramientas locales sin descargas externas
+        # Limpiar variables heredadas del sistema que apuntan al NDK 27 viejo
+        unset ANDROID_NDK
+        unset ANDROID_NDK_HOME
+        unset ANDROID_NDK_ROOT
+        
+        # Configurar Java nativo
         export JAVA_HOME=$JAVA_HOME_17_X64
         export PATH=$JAVA_HOME/bin:$PATH
         
